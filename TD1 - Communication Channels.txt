@@ -1,32 +1,18 @@
-{\rtf1\ansi\ansicpg1252\cocoartf2870
-\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
-{\colortbl;\red255\green255\blue255;\red0\green0\blue0;}
-{\*\expandedcolortbl;;\cssrgb\c0\c0\c0;}
-\paperw11900\paperh16840\margl1440\margr1440\vieww11700\viewh22060\viewkind0
-\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+BROKER:
+The class BROKER needs to be identified by a name.
+It needs to manage the connection between TASKs.
+It must be able to accept incoming connections on a specific port, returning a CHANNEL if successful.
+It must also be able to actively initiate a connection to a remote BROKER, identified by its name and port, which also returns a CHANNEL.
 
-\f0\fs36 \cf0 BROKER:\
-The class BROKER needs to be identified by a name.\
-It needs to manage the connection between TASKs.\
-\pard\pardeftab720\partightenfactor0
-\cf0 \expnd0\expndtw0\kerning0
-\outl0\strokewidth0 \strokec2 It must be able to accept incoming connections on a specific port, returning a CHANNEL if successful.\kerning1\expnd0\expndtw0 \outl0\strokewidth0 \
-\expnd0\expndtw0\kerning0
-\outl0\strokewidth0 \strokec2 It must also be able to actively initiate a connection to a remote BROKER, identified by its name and port, which also returns a CHANNEL.\kerning1\expnd0\expndtw0 \outl0\strokewidth0 \
-\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
-\cf0 \
-CHANNEL:\
-This class must have methods to exchange data between TASKs.\
-To read, it must have a method that accepts a limited length per iteration and stores the bytes in an array of bytes using an offset as an index. It returns the number of bytes read as an int.\
-To write, a similar approach must be applied. It must have a method that sends a limited length per iteration, it needs to store all the bytes in an array also using an offset as an index. It returns the number of bytes written as an int.\
-If the CHANNEL is completely empty the method to read data must be blocked and if the CHANNEL is full the method to write data must be blocked.\
-A method that can disconnect the CHANNEL to end the exchange of data must be available, and also a method to check the CHANNEL connection status.\
-\
-\
-TASK:\
-\pard\pardeftab720\partightenfactor0
-\cf0 \expnd0\expndtw0\kerning0
-\outl0\strokewidth0 \strokec2 The class TASK extends the Thread class to represent a process running within a BROKER.\
-\pard\pardeftab720\partightenfactor0
-\cf0 \strokec2 The constructor must accept the local BROKER instance along with a Runnable representing the specific logic to execute.\
-It must provide a static method allowing the currently executing task to retrieve the instance of its associated BROKER.}
+CHANNEL:
+This class must have methods to exchange data between TASKs.
+To read, it must have a method that accepts a limited length per iteration and stores the bytes in an array of bytes using an offset as an index. It returns the number of bytes read as an int.
+To write, a similar approach must be applied. It must have a method that sends a limited length per iteration, it needs to store all the bytes in an array also using an offset as an index. It returns the number of bytes written as an int.
+If the CHANNEL is completely empty the method to read data must be blocked and if the CHANNEL is full the method to write data must be blocked.
+A method that can disconnect the CHANNEL to end the exchange of data must be available, and also a method to check the CHANNEL connection status.
+
+
+TASK:
+The class TASK extends the Thread class to represent a process running within a BROKER.
+The constructor must accept the local BROKER instance along with a Runnable representing the specific logic to execute.
+It must provide a static method allowing the currently executing task to retrieve the instance of its associated BROKER.
