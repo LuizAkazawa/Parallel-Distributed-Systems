@@ -1,0 +1,42 @@
+BROKER MANAGER:
+- A Singleton class will be used to keep track of all active brokers in the system.
+- It will hold a thread-safe map where the key is the Broker's string name and the value is the Broker instance.
+- When a new BROKER is created, it registers itself by calling BrokerManager.add().
+- When a connect(name, port) is called, it will first call BrokerManager.get(name). If this returns null, the connect method immediately returns null. If it finds the broker, it proceeds with the port rendez-vous logic.
+
+BROKER:
+Serves as a factory for establishing full-duplex communication channels between tasks ->
+- To manage the rendez-vous, a thread-safe Map will be used where the key is the port number.
+- The value in the Map will be an object holding the state of that port. This state will contain: a single boolean flag isAccepting (only one task can accept on a port at a time), a Queue for incoming connect requests (multiple tasks can try to connect at once), and a placeholder for the created Channel.
+- If accept() is called: It locks the port state. It checks the connect queue. If the queue is empty, it sets the isAccepting flag to true and calls wait() on the port state object. Once it wakes up (connect() thread notified it), it grabs the Channel that the connect thread placed in the port state placeholder, and returns it. If the queue is NOT empty, it takes the first connect request object from the queue, creates the 2 CircularBuffers for the full-duplex Channel, and attaches the Channel to that request object. Then, it calls notify() on that exact request object to wake up the specific connecting thread, and returns the Channel.
+- If connect() is called: It locks the remote port state. It checks the isAccepting flag. If the flag is false, it creates a connection request object and adds it to the connect queue. It then releases the lock on the port state, locks the specific request object, and calls wait() on it so it sleeps until an accept arrives. If the flag is true, it means an accept thread is already waiting. The connect method then creates the 2 CircularBuffers for the Channel, sets isAccepting to false, passes the Channel to the port state, and calls notify() on the port state object to wake up the waiting accept thread, then returns the Channel.
+
+One endpoint has Tx = buf1, Rx = buf2.
+The reciprocal endpoint has Tx = buf2, Rx = buf1.
+
+
+CHANNEL:
+- Each CHANNEL instance holds reference to two CircularBuffer instances, for each side we have the incoming buffer(Rx) and the outgoing buffer(Tx).
+- The buffer used as INPUT on side A is used as output on side B.
+
+- The read method blocks if Rx is empty.
+- Performs a transfer of available bytes from Rx into the array starting at offset, but strictly limited to the length parameter. It will never read more bytes than requested, even if Rx has extra data waiting.
+- Returns the count of bytes read, or 0 if the channel is disconnected and no more bytes remain in Rx.
+
+- The write method blocks if Tx is full.
+- The channel transfers as many bytes as it currently has room for into Tx, up to a maximum of the length parameter. It stops and returns the number of bytes successfully written if Tx becomes full or if it finishes writing the requested length.
+
+- disconnect() -> Change the flag "disconnected" to TRUE.
+- Invokes notifyAll() on the Channel's synchronization locks to immediately awaken any threads sleeping in read() or write().
+- Any subsequent write() calls on a disconnected channel simply drop the bytes and do nothing (no exceptions).  
+- Any subsequent read() calls will drain any remaining bytes in Rx, and once empty, will just return 0 to indicate it's done.
+
+
+TASK:
+- The task retains an immutable reference to Broker b stored in an instance field (private final Broker broker)
+- On static Task task() -> The static lookup delegates to Thread.currentThread() to determine the calling context
+- Checks if Thread.currentThread() instanceof Task
+- If true, casts the running thread to Task and returns it.  
+- If false, throws an IllegalStateException.
+- On instance method getBroker() -> Simply returns the bound broker instance.
+- Task consumes the unstructured, FIFO byte stream provided by Channel

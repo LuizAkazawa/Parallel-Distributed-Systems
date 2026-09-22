@@ -1,0 +1,25 @@
+BROKER:
+The class BROKER needs to be identified by a name.
+It needs to manage the connection between TASKs.
+It must be able to accept incoming connections on a specific port, returning a CHANNEL if successful.
+Also, only one task can wait to accept a connection on a specific port for a given broker at a time. But it's perfectly fine for multiple tasks to accept on different ports on the exact same broker, or for tasks on completely different brokers to use the same port number
+It must also be able to actively initiate a connection to a remote BROKER, identified by its name and port, which also returns a CHANNEL.
+Just like accepting, initiating a connect is a blocking action; the task will wait until the remote broker actually accepts the connection
+Since multiple tasks can share and use the same BROKER at the same time, the BROKER class needs to be completely thread-safe
+
+
+CHANNEL:
+This class must have methods to exchange data between TASKs.
+To read, it must have a method that accepts a limited length per iteration and stores the bytes in an array of bytes using an offset as an index. It returns the number of bytes read as an int.
+To write, it must have a method that takes an existing array of bytes, and sends a limited length of those bytes into the channel, using an offset to know where to start reading from the array.
+The read and write methods don't have to process the full length requested all at once. If the channel is completely empty, the read method will block, and if it is full, the write method will block. Otherwise, as long as there is at least one byte to read or room for one byte to write, it will process what it can and return the amount it actually handled.
+For thread safety, it's fine to have one task reading and another task writing at the exact same time on the same side of the channel. But, we can't have two tasks trying to read at the same time, or two tasks trying to write at the same time on the same channel end.
+A method that can disconnect the CHANNEL to end the exchange of data must be available, and also a method to check the CHANNEL connection status.
+When someone disconnects the channel, any bytes that were already sent must still be readable by the other side before they actually see the channel as disconnected. If a task is stuck waiting to read, disconnecting should unblock it and just return 0. If it's stuck waiting to write, it should unblock and just drop the rest of the bytes. Finally, if someone tries to write to an already disconnected channel, it shouldn't throw an error; it should just ignore and drop the bytes.
+
+
+TASK:
+The class TASK represents a process/thread running within a BROKER.
+To create a task, it needs to accept the local BROKER instance, a Runnable representing the specific logic to execute, and a name to identify it.
+It must provide a static method to retrieve the currently executing task, and a regular method to get the BROKER associated with that task.
+The class must also provide methods allowing an existing task to create new brokers and spawn completely new tasks.
