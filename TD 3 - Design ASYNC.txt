@@ -1,0 +1,41 @@
+BROKER MANAGER:
+- A Singleton class will be used to keep track of all active queue brokers in the system.
+- It will hold a thread-safe map where the key is the QueueBroker's string name and the value is the QueueBroker instance.
+- When a new QUEUE BROKER is created, it registers itself by calling BrokerManager.add().
+- When connect(name, port, listener) is called, it will first call BrokerManager.get(name). If this returns null, the connect method immediately returns false. If it finds the broker, it proceeds with the asynchronous port rendez-vous logic.
+
+QUEUE BROKER:
+Serves as an asynchronous factory and rendezvous point for full-duplex Message Queues ->
+- Each broker is created with a unique name and retains a reference to the Task that created it (the owner Task).
+- To manage the rendez-vous asynchronously, it holds two thread-safe Maps:
+  1. `boundPorts`: The key is the port number, the value is the `BindListener`.
+  2. `pendingConnections`: The key is the port number, the value is a Queue of `ConnectRequest` objects.
+- If bind() is called: It saves the BindListener in the `boundPorts` map. It then checks the `pendingConnections` queue for that port. If there are pending requests, it dequeues them and creates the cross-linked MessageQueue pairs. For each pair, it posts `bindListener.accepted(serverQueue)` to its own owner Task, and posts `connectListener.connected(clientQueue)` to the remote calling Task. It returns a boolean immediately.
+- If unbind(port) is called: It removes the BindListener from the `boundPorts` map and immediately posts `bindListener.unbound()` to the broker's owner Task.
+- If connect() is called: It retrieves the remote broker from the BrokerManager. It locks the remote broker's port state. If the port is currently bound, it creates the cross-linked MessageQueue pair, posts the `accepted` event to the remote broker's Task, and posts the `connected` event to the calling Task. If the port is not bound, it simply creates a connection request object and adds it to the `pendingConnections` queue. It returns true immediately without blocking.
+- If a target QueueBroker is destroyed or its owner Task dies (`exit()` or `fail()`), the broker iterates through its `pendingConnections` queue and posts `connectListener.refused()` to the caller Task of every waiting client, ensuring no task waits forever for a rendezvous that will never happen.
+
+MESSAGE QUEUE:
+- Each MESSAGE QUEUE instance is full-duplex and holds a direct reference to its reciprocal peer queue.
+- It holds a reference to the broker that created it.
+- State: holds a boolean `closed` flag, a boolean `remoteClosed` flag, the `Listener`, and the `listenerTask`, the Task that called setListener.
+- The send() method is entirely non-blocking:
+  - If the local `closed` flag is true OR `remoteClosed` is true, the message is dropped. It immediately posts `sendListener.sent()` to the caller's Task to return byte ownership.
+  - If the queue is open, it extracts the valid byte payload. It posts an event to the peer queue's `listenerTask` to invoke `peer.listener.received(payload)`. It then immediately posts an event to the local caller's Task to invoke `sendListener.sent()` to return ownership of the byte array.
+- The close() method handles the two closure endpoints (Closed vs Closing):
+  - Changes the local `closed` flag to true. Any subsequent local sends will drop the message and return ownership.
+  - It posts a special closure event to the peer queue's `listenerTask`: `() -> peer.handleRemoteClose()`.
+- When the peer executes handleRemoteClose() on its Task event loop:
+  - Because it executes sequentially, any `received()` events that arrived *before* the closure event will be processed normally.
+  - It changes its `remoteClosed` flag to true.
+  - It invokes `listener.closed()` on the peer.
+  - The peer is now the "Closing End-Point". Any subsequent `send()` calls by the peer will see `remoteClosed == true`, drop the message, and return ownership.
+
+TASK:
+- The CTask wraps a standard Java Thread, but its run() method is an infinite loop that processes events.
+- It contains a thread-safe FIFO queue.
+- The run() method simply takes the next Runnable from the queue and calls .run() on it. It never blocks on networking or I/O.
+- On post(Runnable r) -> Adds the runnable to the queue. 
+- On post(Runnable r, int delay) -> Uses a ScheduledExecutorService to add the runnable to the queue after a delay.
+- Lifecycle: Retains a boolean flag for `dead()` (completed or failed). When exit() or fail() is called, it posts an event to the Task that originally called set(Listener l) to notify it of the outcome.
+- On static Task task() -> Delegates to ThreadLocal, or checks Thread.currentThread(), to determine the calling context and return the running Task object.
