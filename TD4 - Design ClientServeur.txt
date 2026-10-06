@@ -1,0 +1,44 @@
+### STATEFUL ARCHITECTURE ###
+
+STATEFUL SERVER:
+- Acts as the active central coordinator for mutual exclusion.
+- Maintains a current_owner field tracking the client currently in the critical section.
+- Maintains a FIFO waiting_list of clients that have requested the lock.
+- On Request: If current_owner is null, it assigns the lock and gives permission to the client. If occupied, it appends the client to the waiting_list and keeps the client waiting.
+- On Release: It clears the current owner, pops the next client from the waiting_list, sets them as the new owner, and gives them permission.
+- Writes every state change to a persistent disk log before responding to clients.
+- On Crash Recovery: Upon reboot, it replays log saved on disk to perfectly reconstruct the waiting_list and current_owner, then uses the Failure Detector to verify if those reconstructed clients are still alive.
+
+STATEFUL CLIENT:
+- Connects to the server to request access to the critical section.
+- Waits for permission from the server.
+- Upon finishing the critical section, sends a RELEASE message to the server.
+- Data Consistency: If it is notified of a CORRUPTED_FLAG when given permission, it must execute a data consistency check or rollback before using the shared resource.
+
+STATEFUL FAILURE DETECTOR:
+- Placed on the SERVER.
+- Continuously monitors the current_owner and all queued clients.
+- If the current_owner crashes, it notifies the Server to forcefully revoke the lock and give permission to the next client in the queue, preventing deadlock.
+- If a queued client crashes, it notifies the Server to remove them from the waiting_list.
+
+
+### STATELESS ARCHITECTURE ###
+
+STATELESS SERVER:
+- Acts as a passive registry.
+- Persists the queue state in a backend datastore rather than just in RAM.
+- On Request: It writes the client to the persistent queue, returns the client's current queue position, and immediately drops the connection.
+- On Poll: Returns the client's current position in the queue.
+- On Turn: Gives permission to enter the critical section using a Time-To-Live Lease, along with an increasing Token.
+- On Crash Recovery: It reconnects to the persistent backend and continues sending polling requests.
+
+STATELESS CLIENT:
+- Sends a request and immediately receives its queue position.
+- Periodically polls the server with a POLL request to check its position.
+- When given permission, it enters the critical section. It must send RENEW messages to the server before the lease expires, and a RELEASE message when finished.
+- Data Consistency: Uses the Token on all shared resource writes. If the client freezes and its lease expires, the shared resource will reject its delayed writes because the token is outdated.
+
+STATELESS FAILURE DETECTOR:
+- Placed on the CLIENTS.
+- The client currently at the front of the waiting_list uses the FD to monitor the current_owner.
+- If the owner crashes, the waiting client tells the server to remove the dead owner and pass the turn.
